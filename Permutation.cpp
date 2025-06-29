@@ -4,6 +4,7 @@
 #include <initializer_list>
 #include <set>
 #include <cassert>
+#include <utility>
 
 using namespace std;
 
@@ -31,8 +32,15 @@ class Permutation{
 
 		//演算子
 		bool operator==(const Permutation&) const;
+		//Bruhat順序での被覆
 		bool operator<<(const Permutation&) const;
+		//弱順序での被覆
+		bool operator<(const Permutation&) const;
 		Permutation operator*(const Permutation&) const;
+
+		//特定の性質を満たすかどうか判定する系
+		bool avoiding(const Permutation&) const;
+		bool is_vincular_pattern_avoiding(string pattern) const;
 
 		//べんり関数
 		void show() const;
@@ -47,8 +55,36 @@ class Permutation{
 	private:
 		vector<int> entry;
 		bool check_vector_is_permutation(vector<int>) const;
+		vector<int> calculate_relative_rank(const vector<int> &) const;
 };
 
+//calculate_relative_rankは，列を正規化する関数
+// example input: 5 3 2 6 3 9
+// output       : 3 2 1 4 2 5
+vector<int> Permutation::calculate_relative_rank(const vector<int> & vec) const{
+	assert(not vec.empty());
+	vector< pair<int,int> > indexed_nums(vec.size());
+	for(int i=0; i<vec.size(); i++){
+		indexed_nums[i] = {vec[i], i};
+	}
+	sort(indexed_nums.begin(), indexed_nums.end());
+	int last = indexed_nums[indexed_nums.size()-1].first;
+	int rank = 1;
+	for(int i=0; i<indexed_nums.size(); i++){
+		int kari = indexed_nums[i].first;
+		indexed_nums[i].first = rank;
+		if(i < indexed_nums.size()-1 && kari < indexed_nums[i+1].first){
+			rank++;
+		}
+	}
+	sort(indexed_nums.begin(), indexed_nums.end(), 
+			[](pair<int,int> a, pair<int,int> b){return a.second < b.second;});
+	vector<int> result(vec.size());
+	for(int i=0; i<vec.size(); i++){
+		result[i] = indexed_nums[i].first;
+	}
+	return result;
+}
 bool Permutation::check_vector_is_permutation(vector<int> vec) const{
 	vector<int> sorted = vec;
 	sort(sorted.begin(), sorted.end());
@@ -57,6 +93,30 @@ bool Permutation::check_vector_is_permutation(vector<int> vec) const{
 			return false;
 		}
 	}
+	return true;
+}
+
+//特定の性質を満たすかどうか判定する系
+bool Permutation::avoiding(const Permutation& pattern) const{
+	if(this->size() < pattern.size()){
+		return true;
+	}
+	vector<int> choice(this->size());
+	for(int i=0; i<pattern.size(); i++){
+		choice[choice.size()-1-i] = 1;
+	}
+	do{
+		vector<int> subperm_entry;
+		for(int i=0; i<choice.size(); i++){
+			if(choice[i]){
+				subperm_entry.push_back(this->entry[i]);
+			}
+		}
+		subperm_entry = calculate_relative_rank(subperm_entry);
+		if(pattern.get_entry() == subperm_entry){
+			return false;
+		}
+	}while(next_permutation(choice.begin(), choice.end()));
 	return true;
 }
 
@@ -73,6 +133,7 @@ Permutation Permutation::operator*(const Permutation& right) const{
 	Permutation product(new_entry);
 	return product;
 }
+//Bruhat順序での被覆
 bool Permutation::operator<<(const Permutation& other) const{
 	if(this->size() != other.size()){
 		return false;
@@ -99,6 +160,22 @@ bool Permutation::operator<<(const Permutation& other) const{
 		}
 	}
 	return false;
+}
+//弱順序での被覆
+bool Permutation::operator<(const Permutation& other) const{
+	if(this->size() != other.size()){
+		return false;
+	}
+	for(int i=0; i<this->size()-1; i++){
+		if(this->entry[i] < this->entry[i+1]){
+			Permutation tau(this->size(), this->entry[i], this->entry[i+1]);
+			if(tau*(*this) == other){
+				return true;
+			}
+		}
+	}
+	return false;
+	
 }
 
 //べんり関数
@@ -274,12 +351,41 @@ vector<Permutation> enum_permutation(int size){
 	return result;
 }
 
+void show(vector<int> vec){
+	for(int i=0; i<vec.size(); i++){
+		printf("%2d", vec[i]);
+	}
+	printf("\n");
+	return;
+}
 
-int main(){
+int xmain(){
+	//Permutation pattern{2,3,1};
+	Permutation sigma{4,2,1,3};
 	vector<Permutation> perms = enum_permutation(4);
 	for(Permutation perm: perms){
-		perm.show_findmap(perm.inverse());
+		if(sigma < perm){
+			printf("\\draw (");
+			for(int i=0; i<4; i++){
+				printf("%d", sigma.get_entry(i));
+			}
+			printf(")--(");
+			for(int i=0; i<4; i++){
+				printf("%d", perm.get_entry(i));
+			}
+			printf(");\n");
+		}
 	}
 	return 0;
 }
+int main(){
+	Permutation pattern{3,1,2};
+	vector<Permutation> perms = enum_permutation(4);
+	for(Permutation &perm: perms){
+		if(perm.avoiding(pattern)){
+			perm.show();
+		}
+	}
 
+	return 0;
+}
